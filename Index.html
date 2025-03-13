@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>老千的火柴</title>
+    <style>
+        body {
+            background-color: black;
+            color: #FF4500;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #FF4500;
+        }
+        .match-row {
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .match {
+            font-size: 2em;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        .credit-display {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 1.5em;
+        }
+        .bet-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .bet-buttons button {
+            padding: 10px 20px;
+            background-color: #FF4500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .game-controls {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .game-controls button {
+            padding: 10px 20px;
+            background-color: #FF4500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .result-screen {
+            display: none;
+            text-align: center;
+            margin-top: 50px;
+        }
+        .result-screen button {
+            padding: 10px 20px;
+            background-color: #FF4500;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>老千的火柴</h1>
+        <!-- 主页 -->
+        <div id="home-page">
+            <input type="text" id="playerName" placeholder="请输入你的名字">
+            <button onclick="startGame()">开始游戏</button>
+        </div>
+
+        <!-- 游戏页面 -->
+        <div id="game-page" style="display: none;">
+            <div class="credit-display">信用点: <span id="credit">100</span></div>
+            <div class="bet-buttons">
+                <button onclick="placeBet(10)">10</button>
+                <button onclick="placeBet(20)">20</button>
+                <button onclick="placeBet(50)">50</button>
+                <button onclick="placeBet(100)">100</button>
+                <button onclick="placeBet(200)">200</button>
+                <button onclick="placeBet(500)">500</button>
+                <button onclick="placeBet(1000)">1000</button>
+            </div>
+            <div id="match-area"></div>
+            <div class="game-controls">
+                <button onclick="endTurn()">结束回合</button>
+                <button onclick="undoMove()">撤回</button>
+                <button onclick="surrender()">投降</button>
+            </div>
+        </div>
+
+        <!-- 结算页面 -->
+        <div id="result-screen" class="result-screen">
+            <h2 id="result-text"></h2>
+            <button onclick="returnToBetPage()">返回下注</button>
+        </div>
+    </div>
+
+    <script>
+        let playerName;
+        let credit = 100;
+        let currentBet = 0;
+        let matchRows = [3, 5, 7]; // 初始三排
+        let moveHistory = [];
+        let isPlayerTurn = true;
+        let hasLent = false;
+
+        // 必胜组合列表
+        const winningCombinations = [
+            [0, 0, 1],
+            [1, 1, 1],
+            [0, 2, 2],
+            [0, 3, 3],
+            [0, 4, 4],
+            [0, 5, 5],
+            [1, 2, 3],
+            [1, 4, 5],
+            [2, 4, 6]
+        ];
+
+        // 当前选择的行和要消除的数量
+        let selectedRow = null;
+        let selectedCount = 0;
+
+        // 初始化游戏
+        function startGame() {
+            playerName = document.getElementById('playerName').value;
+            if (!playerName) {
+                alert("请输入名字！");
+                return;
+            }
+            showPage('game-page');
+            resetGame();
+        }
+
+        function showPage(pageId) {
+            document.getElementById('home-page').style.display = 'none';
+            document.getElementById('game-page').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'none';
+            document.getElementById(pageId).style.display = 'block';
+        }
+
+        function resetGame() {
+            credit = 100;
+            document.getElementById('credit').textContent = credit;
+            currentBet = 0;
+            updateMatchRows([3,5,7]);
+        }
+
+        function updateMatchRows(rows) {
+            matchRows = rows;
+            const matchArea = document.getElementById('match-area');
+            matchArea.innerHTML = '';
+            rows.forEach((count, index) => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'match-row';
+                rowDiv.dataset.rowIndex = index;
+                for (let i = 0; i < count; i++) {
+                    const matchSpan = document.createElement('span');
+                    matchSpan.className = 'match';
+                    matchSpan.textContent = '🔥';
+                    matchSpan.onclick = () => selectMatch(i, index);
+                    rowDiv.appendChild(matchSpan);
+                }
+                matchArea.appendChild(rowDiv);
+            });
+        }
+
+        function selectMatch(position, rowIndex) {
+            selectedRow = rowIndex;
+            selectedCount = position + 1; // 从0开始，所以+1
+        }
+
+        function placeBet(amount) {
+            if (credit < amount) {
+                alert("信用不足！");
+                return;
+            }
+            currentBet = amount;
+            credit -= currentBet;
+            document.getElementById('credit').textContent = credit;
+            updateMatchRows([3,5,7]);
+        }
+
+        function endTurn() {
+            if (selectedRow === null || selectedCount === 0) {
+                alert("请选择要消除的火柴！");
+                return;
+            }
+            const newRow = [...matchRows];
+            const row = selectedRow;
+            const count = selectedCount;
+            if (newRow[row] < count) {
+                alert("不能消除超过该排的火柴数！");
+                return;
+            }
+            newRow[row] -= count;
+            moveHistory.push({ state: [...matchRows], bet: currentBet });
+            matchRows = newRow;
+            updateMatchRows(newRow);
+            selectedRow = null;
+            selectedCount = 0;
+
+            if (isGameOver(matchRows)) {
+                if (isPlayerTurn) {
+                    credit -= currentBet;
+                    showResult("你输了！", false);
+                } else {
+                    credit += currentBet * 2;
+                    showResult("你赢了！", true);
+                }
+                return;
+            }
+
+            isPlayerTurn = false;
+            setTimeout(() => {
+                const aiMove = aiMakeMove(matchRows);
+                if (!aiMove) {
+                    showResult("你赢了！", true);
+                    return;
+                }
+                const aiRow = aiMove.row;
+                const aiCount = aiMove.count;
+                newRow[aiRow] -= aiCount;
+                moveHistory.push({ state: [...matchRows], bet: currentBet });
+                matchRows = newRow;
+                updateMatchRows(newRow);
+
+                if (isGameOver(matchRows)) {
+                    if (isPlayerTurn) {
+                        credit -= currentBet;
+                        showResult("你输了！", false);
+                    } else {
+                        credit += currentBet * 2;
+                        showResult("你赢了！", true);
+                    }
+                    return;
+                }
+                isPlayerTurn = true;
+            }, 500);
+        }
+
+        function isGameOver(rows) {
+            return rows.reduce((a, b) => a + b, 0) === 0;
+        }
+
+        function aiMakeMove(currentState) {
+            const possibleMoves = [];
+            for (let row = 0; row < 3; row++) {
+                for (let count = 1; count <= currentState[row]; count++) {
+                    possibleMoves.push({ row, count });
+                }
+            }
+
+            for (const move of possibleMoves) {
+                const newState = [...currentState];
+                newState[move.row] -= move.count;
+                const sortedState = newState.sort((a, b) => a - b);
+                if (winningCombinations.some(comb => 
+                    comb[0] === sortedState[0] && 
+                    comb[1] === sortedState[1] && 
+                    comb[2] === sortedState[2]
+                )) {
+                    return move;
+                }
+            }
+
+            return possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+        }
+
+        function showResult(result, isWin) {
+            document.getElementById('result-text').textContent = result;
+            showPage('result-screen');
+            if (isWin) {
+                credit += currentBet * 2;
+            } else {
+                credit -= currentBet;
+            }
+            document.getElementById('credit').textContent = credit;
+            currentBet = 0;
+
+            if (credit <= 0) {
+                if (!hasLent) {
+                    credit += 100;
+                    hasLent = true;
+                    alert("信用不足，已借贷100信用点，再输将结束游戏！");
+                } else {
+                    showPage('home-page');
+                    resetGame();
+                }
+            }
+
+            if (credit >= 10000) {
+                alert("恭喜通关！");
+                showPage('home-page');
+                resetGame();
+            }
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0) {
+                alert("无法撤回！");
+                return;
+            }
+            const lastMove = moveHistory.pop();
+            matchRows = lastMove.state;
+            updateMatchRows(matchRows);
+            currentBet = lastMove.bet;
+        }
+
+        function surrender() {
+            if (currentBet > 0) {
+                credit -= currentBet;
+                showResult("你投降了，输了本轮赌注！", false);
+            }
+        }
+
+        function returnToBetPage() {
+            showPage('game-page');
+            updateMatchRows([3,5,7]);
+            currentBet = 0;
+            selectedRow = null;
+            selectedCount = 0;
+            moveHistory = [];
+            isPlayerTurn = true;
+        }
+    </script>
+</body>
+</html>
